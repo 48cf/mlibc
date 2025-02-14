@@ -4,6 +4,7 @@
 #include <linux/fs.h>
 #include <linux/input.h>
 #include <linux/kd.h>
+#include <linux/kvm.h>
 #include <linux/nvme_ioctl.h>
 #include <linux/sockios.h>
 #include <linux/usb/cdc-wdm.h>
@@ -13,8 +14,10 @@
 #include <netinet/in.h>
 #include <scsi/sg.h>
 #include <sys/ioctl.h>
+#include <asm/vmx.h>
 
 #include <bits/ensure.h>
+#include <bits/errors.hpp>
 #include <bragi/helpers-frigg.hpp>
 #include <frg/vector.hpp>
 #include <mlibc/all-sysdeps.hpp>
@@ -1175,6 +1178,443 @@ int sys_ioctl(int fd, unsigned long request, void *arg, int *result) {
 		mlibc::infoLogger() << "\e[35mmlibc: FS_IOC_GETFLAGS is a no-op" << frg::endlog;
 		*result = 0;
 		return ENOSYS;
+	} else if(request == KVM_GET_API_VERSION) {
+		managarm::fs::KvmGetApiVersionRequest<MemoryAllocator> req(getSysdepsAllocator());
+		auto [offer, send_ioctl_req, send_req, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmGetApiVersionReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+		*result = resp.api_version();
+		return 0;
+	} else if(request == KVM_CREATE_VM) {
+		auto param = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(arg));
+
+		managarm::fs::KvmCreateVmRequest<MemoryAllocator> req(getSysdepsAllocator());
+		req.set_machine_type(param);
+
+		auto [offer, send_ioctl_req, send_req, send_creds, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+					helix_ng::imbueCredentials(),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(send_creds.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmCreateVmReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		if(resp.error() != managarm::fs::Errors::SUCCESS)
+			return resp.error() | toErrno;
+
+		*result = resp.vm_fd();
+		return 0;
+	} else if(request == KVM_GET_VCPU_MMAP_SIZE) {
+		managarm::fs::KvmGetVcpuMmapSizeRequest<MemoryAllocator> req(getSysdepsAllocator());
+		auto [offer, send_ioctl_req, send_req, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmGetVcpuMmapSizeReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		*result = resp.mmap_size();
+		return 0;
+	} else if(request == KVM_CREATE_VCPU) {
+		auto param = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(arg));
+
+		managarm::fs::KvmCreateVcpuRequest<MemoryAllocator> req(getSysdepsAllocator());
+		req.set_vcpu_id(param);
+
+		auto [offer, send_ioctl_req, send_req, send_creds, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+					helix_ng::imbueCredentials(),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(send_creds.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmCreateVcpuReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		if(resp.error() != managarm::fs::Errors::SUCCESS)
+			return resp.error() | toErrno;
+
+		*result = resp.vcpu_fd();
+		return 0;
+	} else if(request == KVM_SET_USER_MEMORY_REGION) {
+		auto param = reinterpret_cast<struct kvm_userspace_memory_region *>(arg);
+
+		managarm::fs::KvmSetMemoryRegionRequest<MemoryAllocator> req(getSysdepsAllocator());
+		req.set_slot(param->slot);
+		req.set_flags(param->flags);
+		req.set_guest_phys_addr(param->guest_phys_addr);
+		req.set_user_addr(param->userspace_addr);
+		req.set_memory_size(param->memory_size);
+
+		auto [offer, send_ioctl_req, send_req, send_creds, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+					helix_ng::imbueCredentials(),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(send_creds.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmSetMemoryRegionReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		if(resp.error() != managarm::fs::Errors::SUCCESS)
+			return resp.error() | toErrno;
+
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_TSS_ADDR) {
+		*result = 0;
+		return 0;
+	} else if(request == KVM_RUN) {
+		managarm::fs::KvmVcpuRunRequest<MemoryAllocator> req(getSysdepsAllocator());
+		auto [offer, send_ioctl_req, send_req, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmVcpuRunReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		if(resp.error() != managarm::fs::Errors::SUCCESS)
+			return resp.error() | toErrno;
+
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_REGS) {
+		auto params = reinterpret_cast<struct kvm_regs *>(arg);
+
+		managarm::fs::KvmVcpuGetRegistersRequest<MemoryAllocator> req(getSysdepsAllocator());
+		auto [offer, send_ioctl_req, send_req, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+					helix_ng::want_lane,
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(recv_resp.error());
+
+		auto preamble = bragi::read_preamble(recv_resp);
+
+		frg::vector<uint8_t, MemoryAllocator> tail(getSysdepsAllocator());
+		tail.resize(preamble.tail_size());
+
+		auto [recv_tail] = exchangeMsgsSync(offer.descriptor().getHandle(),
+			helix_ng::recvBuffer(tail.data(), tail.size()));
+		HEL_CHECK(recv_tail.error());
+
+		auto resp = bragi::parse_head_tail<managarm::fs::KvmVcpuGetRegistersReply>(recv_resp, tail, getSysdepsAllocator());
+		__ensure(resp);
+
+		auto& regs = resp->regs();
+
+		params->rax = regs.rax();
+		params->rbx = regs.rbx();
+		params->rcx = regs.rcx();
+		params->rdx = regs.rdx();
+		params->rsi = regs.rsi();
+		params->rdi = regs.rdi();
+		params->rsp = regs.rsp();
+		params->rbp = regs.rbp();
+		params->r8 = regs.r8();
+		params->r9 = regs.r9();
+		params->r10 = regs.r10();
+		params->r11 = regs.r11();
+		params->r12 = regs.r12();
+		params->r13 = regs.r13();
+		params->r14 = regs.r14();
+		params->r15 = regs.r15();
+		params->rip = regs.rip();
+		params->rflags = regs.rflags();
+
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_REGS) {
+		auto params = reinterpret_cast<struct kvm_regs *>(arg);
+
+		managarm::fs::KvmRegisters<MemoryAllocator> regs(getSysdepsAllocator());
+		regs.set_rax(params->rax);
+		regs.set_rbx(params->rbx);
+		regs.set_rcx(params->rcx);
+		regs.set_rdx(params->rdx);
+		regs.set_rsi(params->rsi);
+		regs.set_rdi(params->rdi);
+		regs.set_rsp(params->rsp);
+		regs.set_rbp(params->rbp);
+		regs.set_r8(params->r8);
+		regs.set_r9(params->r9);
+		regs.set_r10(params->r10);
+		regs.set_r11(params->r11);
+		regs.set_r12(params->r12);
+		regs.set_r13(params->r13);
+		regs.set_r14(params->r14);
+		regs.set_r15(params->r15);
+		regs.set_rip(params->rip);
+		regs.set_rflags(params->rflags);
+
+		managarm::fs::KvmVcpuSetRegistersRequest<MemoryAllocator> req(getSysdepsAllocator());
+		req.set_regs(std::move(regs));
+
+		auto [offer, send_ioctl_req, send_req_head, send_req_tail, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadTail(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req_head.error());
+		HEL_CHECK(send_req_tail.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmVcpuSetRegistersReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		if(resp.error() != managarm::fs::Errors::SUCCESS)
+			return resp.error() | toErrno;
+
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_SREGS) {
+		auto params = reinterpret_cast<struct kvm_sregs *>(arg);
+
+		managarm::fs::KvmVcpuGetSpecialRegistersRequest<MemoryAllocator> req(getSysdepsAllocator());
+		auto [offer, send_ioctl_req, send_req, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+					helix_ng::want_lane,
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadOnly(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req.error());
+		HEL_CHECK(recv_resp.error());
+
+		auto preamble = bragi::read_preamble(recv_resp);
+
+		frg::vector<uint8_t, MemoryAllocator> tail(getSysdepsAllocator());
+		tail.resize(preamble.tail_size());
+
+		auto [recv_tail] = exchangeMsgsSync(offer.descriptor().getHandle(),
+			helix_ng::recvBuffer(tail.data(), tail.size()));
+		HEL_CHECK(recv_tail.error());
+
+		auto resp = bragi::parse_head_tail<managarm::fs::KvmVcpuGetSpecialRegistersReply>(recv_resp, tail, getSysdepsAllocator());
+		__ensure(resp);
+
+		auto& regs = resp->regs();
+
+		const auto convertSegment = [](auto &segment) -> struct kvm_segment {
+			struct kvm_segment seg;
+			memset(&seg, 0, sizeof(seg));
+			seg.base = segment.base();
+			seg.limit = segment.limit();
+			seg.selector = segment.selector();
+			seg.type = segment.type();
+			seg.present = segment.present();
+			seg.dpl = segment.dpl();
+			seg.db = segment.db();
+			seg.s = segment.s();
+			seg.l = segment.l();
+			seg.g = segment.g();
+			seg.avl = segment.avl();
+			return seg;
+		};
+
+		const auto convertDtable = [](auto &dtable) -> struct kvm_dtable {
+			struct kvm_dtable dtab;
+			memset(&dtab, 0, sizeof(dtab));
+			dtab.base = dtable.base();
+			dtab.limit = dtable.limit();
+			return dtab;
+		};
+
+		params->cs = convertSegment(regs.cs());
+		params->ds = convertSegment(regs.ds());
+		params->es = convertSegment(regs.es());
+		params->fs = convertSegment(regs.fs());
+		params->gs = convertSegment(regs.gs());
+		params->ss = convertSegment(regs.ss());
+		params->tr = convertSegment(regs.tr());
+		params->ldt = convertSegment(regs.ldt());
+
+		params->gdt = convertDtable(regs.gdt());
+		params->idt = convertDtable(regs.idt());
+
+		params->cr0 = regs.cr0();
+		params->cr2 = regs.cr2();
+		params->cr3 = regs.cr3();
+		params->cr4 = regs.cr4();
+		params->cr8 = regs.cr8();
+		params->efer = regs.efer();
+		params->apic_base = regs.apic_base();
+
+		size_t copy_size = std::min(sizeof(params->interrupt_bitmap), resp->interrupt_bitmap_size());
+		memcpy(params->interrupt_bitmap, resp->interrupt_bitmap().data(), copy_size);
+
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_SREGS) {
+		auto params = reinterpret_cast<struct kvm_sregs *>(arg);
+
+		const auto convertSegment = [](struct kvm_segment seg) {
+			managarm::fs::KvmSegment<MemoryAllocator> segment(getSysdepsAllocator());
+			segment.set_base(seg.base);
+			segment.set_limit(seg.limit);
+			segment.set_selector(seg.selector);
+			segment.set_type(seg.type);
+			segment.set_present(seg.present);
+			segment.set_dpl(seg.dpl);
+			segment.set_db(seg.db);
+			segment.set_s(seg.s);
+			segment.set_l(seg.l);
+			segment.set_g(seg.g);
+			segment.set_avl(seg.avl);
+			return segment;
+		};
+
+		const auto convertDtable = [](struct kvm_dtable dtab) {
+			managarm::fs::KvmDtable<MemoryAllocator> dtable(getSysdepsAllocator());
+			dtable.set_base(dtab.base);
+			dtable.set_limit(dtab.limit);
+			return dtable;
+		};
+
+		managarm::fs::KvmSpecialRegs<MemoryAllocator> regs(getSysdepsAllocator());
+		regs.set_cs(convertSegment(params->cs));
+		regs.set_ds(convertSegment(params->ds));
+		regs.set_es(convertSegment(params->es));
+		regs.set_fs(convertSegment(params->fs));
+		regs.set_gs(convertSegment(params->gs));
+		regs.set_ss(convertSegment(params->ss));
+		regs.set_tr(convertSegment(params->tr));
+		regs.set_ldt(convertSegment(params->ldt));
+
+		regs.set_gdt(convertDtable(params->gdt));
+		regs.set_idt(convertDtable(params->idt));
+
+		regs.set_cr0(params->cr0);
+		regs.set_cr2(params->cr2);
+		regs.set_cr3(params->cr3);
+		regs.set_cr4(params->cr4);
+		regs.set_cr8(params->cr8);
+		regs.set_efer(params->efer);
+		regs.set_apic_base(params->apic_base);
+
+		frg::vector<uint8_t, MemoryAllocator> interruptBitmap{getSysdepsAllocator()};
+		interruptBitmap.resize(sizeof(params->interrupt_bitmap));
+		memcpy(interruptBitmap.data(), params->interrupt_bitmap, sizeof(params->interrupt_bitmap));
+
+		managarm::fs::KvmVcpuSetSpecialRegistersRequest<MemoryAllocator> req(getSysdepsAllocator());
+
+		req.set_regs(std::move(regs));
+		req.set_interrupt_bitmap(std::move(interruptBitmap));
+
+		auto [offer, send_ioctl_req, send_req_head, send_req_tail, recv_resp] =
+		    exchangeMsgsSync(
+		        handle,
+		        helix_ng::offer(
+		            helix_ng::sendBragiHeadOnly(ioctl_req, getSysdepsAllocator()),
+		            helix_ng::sendBragiHeadTail(req, getSysdepsAllocator()),
+		            helix_ng::recvInline()
+		        )
+		    );
+
+		HEL_CHECK(offer.error());
+		HEL_CHECK(send_ioctl_req.error());
+		HEL_CHECK(send_req_head.error());
+		HEL_CHECK(send_req_tail.error());
+		HEL_CHECK(recv_resp.error());
+
+		managarm::fs::KvmVcpuSetSpecialRegistersReply<MemoryAllocator> resp(getSysdepsAllocator());
+		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
+
+		if(resp.error() != managarm::fs::Errors::SUCCESS)
+			return resp.error() | toErrno;
+
+		*result = 0;
+		return 0;
 	}
 
 	mlibc::infoLogger() << "mlibc: Unexpected ioctl with"
