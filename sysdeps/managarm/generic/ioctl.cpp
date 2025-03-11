@@ -1230,6 +1230,41 @@ int sys_ioctl(int fd, unsigned long request, void *arg, int *result) {
 
 		*result = resp.vm_fd();
 		return 0;
+	} else if(request == KVM_GET_MSR_INDEX_LIST) {
+		auto param = reinterpret_cast<struct kvm_msr_list *>(arg);
+		param->nmsrs = 0;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_CHECK_EXTENSION) {
+		auto param = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(arg));
+		switch(param) {
+		case KVM_CAP_USER_MEMORY:
+		case KVM_CAP_DESTROY_MEMORY_REGION_WORKS:
+		case KVM_CAP_JOIN_MEMORY_REGIONS_WORKS:
+		case KVM_CAP_INTERNAL_ERROR_DATA:
+		case KVM_CAP_IOEVENTFD:
+		case KVM_CAP_IOEVENTFD_ANY_LENGTH:
+		case KVM_CAP_SET_TSS_ADDR:
+		case KVM_CAP_EXT_CPUID:
+		case KVM_CAP_MP_STATE:
+		case KVM_CAP_SIGNAL_MSI:
+		case KVM_CAP_IRQ_ROUTING:
+		case KVM_CAP_DEBUGREGS:
+		case KVM_CAP_XSAVE:
+		case KVM_CAP_VCPU_EVENTS:
+		case KVM_CAP_X86_ROBUST_SINGLESTEP:
+		case KVM_CAP_ADJUST_CLOCK:
+		case KVM_CAP_SET_IDENTITY_MAP_ADDR:
+			*result = 1; // yes
+			return 0;
+
+		case KVM_CAP_MCE:
+			*result = 10;
+			return 0;
+		}
+
+		*result = 0; // no, sorry
+		return 0;
 	} else if(request == KVM_GET_VCPU_MMAP_SIZE) {
 		managarm::fs::KvmGetVcpuMmapSizeRequest<MemoryAllocator> req(getSysdepsAllocator());
 		auto [offer, send_ioctl_req, send_req, recv_resp] =
@@ -1251,6 +1286,18 @@ int sys_ioctl(int fd, unsigned long request, void *arg, int *result) {
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 
 		*result = resp.mmap_size();
+		return 0;
+	} else if(request == KVM_GET_SUPPORTED_CPUID) {
+		auto param = reinterpret_cast<struct kvm_cpuid2 *>(arg);
+		param->nent = 0;
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_SUPPORTED_CPUID is a no-op\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_EMULATED_CPUID) {
+		auto param = reinterpret_cast<struct kvm_cpuid2 *>(arg);
+		param->nent = 0;
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_EMULATED_CPUID is a no-op\e[39m" << frg::endlog;
+		*result = 0;
 		return 0;
 	} else if(request == KVM_CREATE_VCPU) {
 		auto param = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(arg));
@@ -1318,7 +1365,18 @@ int sys_ioctl(int fd, unsigned long request, void *arg, int *result) {
 
 		*result = 0;
 		return 0;
-	} else if(request == KVM_SET_TSS_ADDR) {
+	} else if(request == KVM_SET_TSS_ADDR || request == KVM_SET_IDENTITY_MAP_ADDR) {
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_CLOCK) {
+		auto param = reinterpret_cast<struct kvm_clock_data *>(arg);
+		memset(param, 0, sizeof(*param));
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_CLOCK is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_CLOCK) {
+		auto param = reinterpret_cast<struct kvm_clock_data *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_CLOCK is a stub\e[39m" << frg::endlog;
 		*result = 0;
 		return 0;
 	} else if(request == KVM_RUN) {
@@ -1614,6 +1672,124 @@ int sys_ioctl(int fd, unsigned long request, void *arg, int *result) {
 			return resp.error() | toErrno;
 
 		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_MSRS) {
+		auto param = reinterpret_cast<struct kvm_msrs *>(arg);
+		memset(param->entries, 0, sizeof(*param->entries) * param->nmsrs);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_MSRS is a stub\e[39m" << frg::endlog;
+		*result = param->nmsrs;
+		return 0;
+	} else if(request == KVM_SET_MSRS) {
+		auto param = reinterpret_cast<struct kvm_msrs *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_MSRS is a stub\e[39m" << frg::endlog;
+		*result = param->nmsrs;
+		return 0;
+	} else if(request == KVM_SET_CPUID) {
+		auto param = reinterpret_cast<struct kvm_cpuid2 *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_CPUID is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_SIGNAL_MASK) {
+		auto param = reinterpret_cast<struct kvm_signal_mask *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_SIGNAL_MASK is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_CPUID2) {
+		auto param = reinterpret_cast<struct kvm_cpuid2 *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_CPUID2 is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_CPUID2) {
+		auto param = reinterpret_cast<struct kvm_cpuid2 *>(arg);
+		memset(param->entries, 0, sizeof(*param->entries) * param->nent);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_CPUID2 is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_MP_STATE) {
+		auto param = reinterpret_cast<struct kvm_mp_state *>(arg);
+		param->mp_state = KVM_MP_STATE_RUNNABLE;
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_MP_STATE is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_MP_STATE) {
+		auto param = reinterpret_cast<struct kvm_mp_state *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_MP_STATE is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_DEBUGREGS) {
+		auto param = reinterpret_cast<struct kvm_debugregs *>(arg);
+		memset(param, 0, sizeof(*param));
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_DEBUGREGS is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_DEBUGREGS) {
+		auto param = reinterpret_cast<struct kvm_debugregs *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_DEBUGREGS is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_X86_SETUP_MCE) {
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_X86_SETUP_MCE is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_X86_GET_MCE_CAP_SUPPORTED) {
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_X86_GET_MCE_CAP_SUPPORTED is a stub\e[39m" << frg::endlog;
+		*result = -1;
+		return 0;
+	} else if(request == KVM_ENABLE_CAP) {
+		auto param = reinterpret_cast<struct kvm_enable_cap *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_ENABLE_CAP is a stub\e[39m" << frg::endlog;
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_ENABLE_CAP: cap: " << param->cap << ", flags: " << param->flags << "\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_XSAVE) {
+		auto param = reinterpret_cast<struct kvm_xsave *>(arg);
+		memset(param, 0, sizeof(*param));
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_XSAVE is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_XSAVE) {
+		auto param = reinterpret_cast<struct kvm_xsave *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_XSAVE is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_VCPU_EVENTS) {
+		auto param = reinterpret_cast<struct kvm_vcpu_events *>(arg);
+		memset(param, 0, sizeof(*param));
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_VCPU_EVENTS is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_VCPU_EVENTS) {
+		auto param = reinterpret_cast<struct kvm_vcpu_events *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_VCPU_EVENTS is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_PIT2) {
+		auto param = reinterpret_cast<struct kvm_pit_state2 *>(arg);
+		memset(param, 0, sizeof(*param));
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_PIT2 is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SET_PIT2) {
+		auto param = reinterpret_cast<struct kvm_pit_state2 *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_PIT2 is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_TSC_KHZ) {
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_TSC_KHZ is a stub\e[39m" << frg::endlog;
+		*result = 10000000;
+		return 0;
+	} else if(request == KVM_SET_TSC_KHZ) {
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SET_TSC_KHZ is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_SIGNAL_MSI) {
+		auto param = reinterpret_cast<struct kvm_msi *>(arg);
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_SIGNAL_MSI is a stub\e[39m" << frg::endlog;
+		*result = 0;
+		return 0;
+	} else if(request == KVM_GET_STATS_FD) {
+		mlibc::infoLogger() << "\e[35mmlibc: KVM_GET_STATS_FD is a stub\e[39m" << frg::endlog;
+		*result = -1;
 		return 0;
 	}
 
